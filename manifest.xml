@@ -25,7 +25,7 @@
     <Form xsi:type="ItemRead">
       <DesktopSettings>
         <!-- ★ GitHub Pages のURLに変更してください -->
-        <SourceLocation DefaultValue="https://YOUR-GITHUB-USERNAME.github.io/claude-outlook-addin/taskpane.html"/>
+        <SourceLocation DefaultValue="https://makito.github.io/claude-outlook-addin/taskpane.html"/>
         <RequestedHeight>350</RequestedHeight>
       </DesktopSettings>
     </Form>
