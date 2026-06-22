@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Claude 返信アシスタント</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      font-size: 13px;
+      color: #201f1e;
+      background: #faf9f8;
+      padding: 12px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #edebe9;
+    }
+    .header-icon {
+      width: 28px; height: 28px;
+      background: #d97706;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 14px; font-weight: 700;
+    }
+    .header-title { font-size: 14px; font-weight: 600; color: #201f1e; }
+    .section { margin-bottom: 12px; }
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: #605e5c;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    input[type="password"], textarea {
+      width: 100%;
+      border: 1px solid #d2d0ce;
+      border-radius: 4px;
+      padding: 7px 10px;
+      font-size: 12px;
+      font-family: 'Segoe UI', sans-serif;
+      background: white;
+      color: #201f1e;
+      outline: none;
+    }
+    input[type="password"]:focus, textarea:focus {
+      border-color: #d97706;
+      box-shadow: 0 0 0 2px rgba(217,119,6,0.15);
+    }
+    textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      padding: 9px 14px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: 'Segoe UI', sans-serif;
+      cursor: pointer;
+      border: none;
+      font-weight: 600;
+      transition: background 0.15s;
+    }
+    .btn-primary {
+      background: #d97706;
+      color: white;
+    }
+    .btn-primary:hover { background: #b45309; }
+    .btn-primary:disabled { background: #d2d0ce; cursor: not-allowed; }
+    .btn-secondary {
+      background: white;
+      color: #201f1e;
+      border: 1px solid #d2d0ce;
+      margin-top: 6px;
+    }
+    .btn-secondary:hover { background: #f3f2f1; }
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      margin-bottom: 10px;
+    }
+    .status.loading { background: #fff8e6; color: #92400e; }
+    .status.success { background: #e6f4ea; color: #1e4d2b; }
+    .status.error { background: #fde7e9; color: #6e0011; }
+    .spinner {
+      width: 12px; height: 12px;
+      border: 2px solid #d2d0ce;
+      border-top-color: #d97706;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .email-preview {
+      background: white;
+      border: 1px solid #edebe9;
+      border-radius: 4px;
+      padding: 8px 10px;
+      font-size: 12px;
+      color: #605e5c;
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+    .email-preview strong { color: #201f1e; display: block; margin-bottom: 2px; font-size: 12px; }
+    .key-hint {
+      font-size: 11px;
+      color: #a19f9d;
+      margin-top: 4px;
+    }
+    .divider { height: 1px; background: #edebe9; margin: 12px 0; }
+    #draftSection { display: none; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">C</div>
+  <div>
+    <div class="header-title">Claude 返信アシスタント</div>
+  </div>
+</div>
+
+<div class="section">
+  <label>Claude API キー</label>
+  <input type="password" id="apiKey" placeholder="sk-ant-api03-..." />
+  <div class="key-hint">
+    <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:#d97706;">APIキーを取得する →</a>
+  </div>
+</div>
+
+<div id="emailPreview" class="email-preview" style="display:none;">
+  <strong id="previewSubject"></strong>
+  <span id="previewFrom"></span>
+</div>
+
+<div id="statusBar" style="display:none;" class="status loading">
+  <div class="spinner"></div>
+  <span id="statusText"></span>
+</div>
+
+<button class="btn btn-primary" id="generateBtn" onclick="generate()">
+  &#10024; 返信下書きを生成
+</button>
+
+<div id="draftSection">
+  <div class="divider"></div>
+  <div class="section">
+    <label>返信下書き</label>
+    <textarea id="draftText" rows="8"></textarea>
+  </div>
+  <button class="btn btn-primary" onclick="insertReply()">
+    &#8617; 返信欄に挿入
+  </button>
+  <button class="btn btn-secondary" onclick="regenerate()">
+    &#8635; 書き直す
+  </button>
+</div>
+
+<script>
+Office.onReady(function(info) {
+  if (info.host === Office.HostType.Outlook) {
+    loadEmailPreview();
+    const saved = localStorage.getItem('claude_api_key');
+    if (saved) document.getElementById('apiKey').value = saved;
+  }
+});
+
+function loadEmailPreview() {
+  const item = Office.context.mailbox.item;
+  if (!item) return;
+  document.getElementById('previewSubject').textContent = item.subject || '(件名なし)';
+  document.getElementById('previewFrom').textContent = item.from ? item.from.emailAddress : '';
+  document.getElementById('emailPreview').style.display = 'block';
+}
+
+function showStatus(type, text) {
+  const bar = document.getElementById('statusBar');
+  bar.className = 'status ' + type;
+  bar.style.display = 'flex';
+  bar.innerHTML = (type === 'loading' ? '<div class="spinner"></div>' : '') + '<span>' + text + '</span>';
+}
+function hideStatus() {
+  document.getElementById('statusBar').style.display = 'none';
+}
+
+async function getEmailBody() {
+  return new Promise((resolve, reject) => {
+    Office.context.mailbox.item.body.getAsync(
+      Office.CoercionType.Text,
+      function(result) {
+        if (result.status === Office.AsyncResultStatus.Succeeded) {
+          resolve(result.value);
+        } else {
+          reject(result.error.message);
+        }
+      }
+    );
+  });
+}
+
+async function generate() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  if (!apiKey) {
+    showStatus('error', 'APIキーを入力してください');
+    return;
+  }
+  localStorage.setItem('claude_api_key', apiKey);
+
+  const item = Office.context.mailbox.item;
+  document.getElementById('generateBtn').disabled = true;
+  showStatus('loading', 'メール本文を読み込み中...');
+
+  let body = '';
+  try {
+    body = await getEmailBody();
+  } catch(e) {
+    showStatus('error', 'メール取得に失敗しました: ' + e);
+    document.getElementById('generateBtn').disabled = false;
+    return;
+  }
+
+  const subject = item.subject || '';
+  const from = item.from ? item.from.displayName + ' <' + item.from.emailAddress + '>' : '';
+
+  showStatus('loading', 'Claudeが返信を作成中...');
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-allow-browser': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1000,
+        system: 'あなたはプロフェッショナルなメールアシスタントです。受信メールへの返信下書きを日本語で作成してください。丁寧でビジネスライクなトーンで、メールの本文のみ（件名不要）を出力してください。',
+        messages: [{
+          role: 'user',
+          content: `以下のメールへの返信下書きを作成してください。\n\n差出人: ${from}\n件名: ${subject}\n\n本文:\n${body.substring(0, 3000)}`
+        }]
+      })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.error?.message || resp.statusText);
+    }
+
+    const data = await resp.json();
+    const draft = data.content[0].text;
+    document.getElementById('draftText').value = draft;
+    document.getElementById('draftSection').style.display = 'block';
+    hideStatus();
+    showStatus('success', '返信下書きが完成しました');
+    setTimeout(hideStatus, 2500);
+
+  } catch(e) {
+    showStatus('error', 'エラー: ' + e.message);
+  } finally {
+    document.getElementById('generateBtn').disabled = false;
+  }
+}
+
+function regenerate() {
+  document.getElementById('draftSection').style.display = 'none';
+  generate();
+}
+
+function insertReply() {
+  const draft = document.getElementById('draftText').value;
+  if (!draft) return;
+
+  Office.context.mailbox.item.displayReplyForm({
+    htmlBody: draft.replace(/\n/g, '<br>')
+  });
+}
+</script>
+</body>
+</html>
